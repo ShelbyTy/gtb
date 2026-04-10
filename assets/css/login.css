@@ -1,0 +1,67 @@
+/* CENTRAGE HORIZONTAL */
+.login-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10);
+    padding: 32px;
+    width: 390px;
+
+    margin: 80px auto; /* centre horizontalement */
+}
+
+.login-card > p {
+    font-size: 13.5px;
+    color: #6b7280;
+    margin-bottom: 6px;
+}
+
+.login-card > h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 24px;
+}
+
+.form-login {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.email-part,
+.password-part {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.email-part input,
+.password-part input {
+    width: 100%;
+    border: none;
+    padding: 12px;
+}
+
+.submit-part input {
+    width: 100%;
+    padding: 13px;
+    background: #3a7bd5;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+.submit-part input:hover {
+    background: #2f68c0;
+}
+
+.remember-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.register-link {
+    text-align: center;
+    margin-top: 18px;
+}

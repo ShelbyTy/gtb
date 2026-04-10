@@ -1,0 +1,45 @@
+/* SIDEBAR */
+.side-menu {
+    width: 220px;
+    height: 100vh;
+    background-color: #1e293b;
+    color: white;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* MENU */
+.nav-list {
+    list-style: none;
+    padding: 0;
+}
+
+.nav-item {
+    margin: 15px 0;
+}
+
+.nav-item a {
+    text-decoration: none;
+    color: white;
+    padding: 10px 20px;
+    display: block;
+}
+
+.nav-item a:hover {
+    background-color: #334155;
+    border-radius: 8px;
+}
+
+/* SECTIONS */
+.menu-header,
+.menu-navigation,
+.menu-footer {
+    padding: 20px;
+}
+
+.menu-footer a {
+    color: white;
+    text-decoration: none;
+}
