@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// Message de succès si on revient d'une redirection réussie
 $success = (isset($_GET['connexion']) && $_GET['connexion'] === 'ok' && $_SERVER['REQUEST_METHOD'] !== 'POST')
     ? 'Connexion réussie ! Ravie de vous revoir !'
     : '';
@@ -27,18 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($erreur)) {
         try {
-            // On cherche l'utilisateur par email
             $query = $conn->prepare("SELECT id, email, passwrd FROM users WHERE email = :email");
             $query->execute([':email' => $email]);
             $user = $query->fetch(PDO::FETCH_ASSOC);
 
-            // Vérification sécurisée du mot de passe
             if ($user && password_verify($password, $user['passwrd'])) {
-                // Stockage en session si besoin
                 $_SESSION['user_id'] = $user['id'];
 
-                // Redirection vers la même page pour afficher le message de succès (ou vers dashboard.php)
-                header('Location: login.php?connexion=ok');
+                header('Location: dashboard.php?connexion=ok');
                 exit();
             } else {
                 $erreur = "Identifiants incorrects.";
@@ -56,39 +51,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Se connecter</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="assets/css/global.css">
     <link rel="stylesheet" href="assets/css/login.css">
-
-    <title>Se connecter</title>
 </head>
 
 <body class="auth-page">
 
-    <div class="login-card">
+    <div class="auth-card">
 
         <?php if ($success): ?>
             <div class="alert alert-success">
-                <span class="icon">✅</span> <?php echo $success; ?>
+                <span class="icon">✅</span>
+                <?= htmlspecialchars($success) ?>
             </div>
         <?php endif; ?>
 
         <?php if ($erreur): ?>
             <div class="alert alert-error">
-                <span class="icon">❌</span> <?php echo $erreur; ?>
+                <span class="icon">❌</span>
+                <?= htmlspecialchars($erreur) ?>
             </div>
         <?php endif; ?>
 
-        <p>Bienvenue</p>
-        <h1>Veuillez saisir vos identifiants</h1>
+        <p class="auth-subtitle">Bienvenue</p>
+        <h1 class="auth-title">Connexion</h1>
+        <p class="auth-description">Veuillez saisir vos identifiants pour accéder au dashboard.</p>
 
         <form action="" method="post" class="form-login">
-            <div class="email-part">
+
+            <div class="form-field">
                 <input type="email" name="email" placeholder="Email" required>
             </div>
 
-            <div class="password-part">
-                <input type="password" name="password" placeholder="Mot de passe" required>
+            <div class="form-field password-field">
+                <input
+                    type="password"
+                    name="password"
+                    class="password-input"
+                    placeholder="Mot de passe"
+                    required>
+
+                <button
+                    type="button"
+                    class="password-toggle"
+                    aria-label="Afficher le mot de passe"
+                    title="Afficher le mot de passe">👁</button>
             </div>
 
             <div class="remember-row">
@@ -96,16 +109,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="checkbox" id="rememberme" name="rememberme">
                     <label for="rememberme">Se souvenir de moi</label>
                 </div>
+
                 <a href="#" class="forgot-link">Mot de passe oublié ?</a>
             </div>
 
             <div class="submit-part">
                 <input type="submit" value="Se connecter">
             </div>
+
         </form>
 
-        <p class="register-link">Pas encore de compte ? <a href="register.php">Créer un compte</a></p>
+        <p class="auth-link">
+            Pas encore de compte ? <a href="register.php">Créer un compte</a>
+        </p>
+
     </div>
+
+    <script>
+        document.querySelectorAll('.password-field').forEach(function(field) {
+            const input = field.querySelector('.password-input');
+            const button = field.querySelector('.password-toggle');
+
+            button.addEventListener('click', function() {
+                const isPasswordHidden = input.type === 'password';
+
+                input.type = isPasswordHidden ? 'text' : 'password';
+                button.textContent = isPasswordHidden ? '👁' : '👁';
+
+                button.setAttribute(
+                    'aria-label',
+                    isPasswordHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+                );
+
+                button.setAttribute(
+                    'title',
+                    isPasswordHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+                );
+            });
+        });
+    </script>
 
 </body>
 

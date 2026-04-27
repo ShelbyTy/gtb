@@ -6,21 +6,22 @@
 }
 
 body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
     background-color: #f0f2f5;
     min-height: 100vh;
+    color: #111827;
 }
 
 /* ALERTES */
 .alert {
-    padding: 12px 15px;
+    padding: 11px 14px;
     border-radius: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 18px;
     font-size: 14px;
     display: flex;
     align-items: center;
     gap: 10px;
-    animation: slideIn 0.4s ease-out forwards;
+    animation: slideIn 0.35s ease-out forwards;
 }
 
 .alert-success {
@@ -38,7 +39,7 @@ body {
 @keyframes slideIn {
     from {
         opacity: 0;
-        transform: translateY(-15px);
+        transform: translateY(-12px);
     }
     to {
         opacity: 1;
