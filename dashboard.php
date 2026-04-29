@@ -1,3 +1,7 @@
+<?php
+require_once __DIR__ . '/includes/auth_check.php';
+?>
+
 <!DOCTYPE html>
 <html lang="fr">
 
@@ -39,7 +43,7 @@
         </section>
 
         <section class="menu-footer">
-            <a href="#">Se déconnecter</a>
+            <a href="logout.php">Se déconnecter</a>
         </section>
 
     </aside>

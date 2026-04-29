@@ -1,16 +1,11 @@
 <?php
 session_start();
 
+require_once __DIR__ . '/config/database.php';
+
 $success = (isset($_GET['connexion']) && $_GET['connexion'] === 'ok' && $_SERVER['REQUEST_METHOD'] !== 'POST')
     ? 'Connexion réussie ! Ravie de vous revoir !'
     : '';
-
-try {
-    $conn = new PDO('mysql:host=localhost;dbname=gtb;charset=utf8mb4', 'root', 'root');
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Erreur de connexion : " . $e->getMessage());
-}
 
 $erreur = '';
 
