@@ -18,6 +18,7 @@ if (!$toastMessage && !empty($erreur)) {
 $toastType = $toastMessage['type'] ?? 'success';
 $toastClass = $toastType === 'success' ? 'text-bg-success' : 'text-bg-danger';
 $toastTitle = $toastType === 'success' ? 'Réussite' : 'Erreur';
+$globalCssVersion = filemtime(__DIR__ . '/../assets/css/global.css');
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -29,7 +30,7 @@ $toastTitle = $toastType === 'success' ? 'Réussite' : 'Erreur';
     <title><?= htmlspecialchars($pageTitle) ?></title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/global.css">
+    <link rel="stylesheet" href="assets/css/global.css?v=<?= $globalCssVersion ?>">
 </head>
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
