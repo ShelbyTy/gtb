@@ -186,3 +186,5 @@ Les pages `Caméras` et `Alertes` sont déjà intégrées dans l'interface, mais
 
 Ce dépôt est public.
 Aucune information sensible, personnelle ou confidentielle ne doit y être publiée.
+
+Ce fichier README a été rédigé avec l'aide de l'intelligence artificielle.
