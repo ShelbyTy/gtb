@@ -1,4 +1,4 @@
-/* SIDEBAR */
+/* SIDEBAR - ancien menu lateral garder pour le dashboard */
 .side-menu {
     width: 220px;
     height: 100vh;
@@ -10,7 +10,7 @@
     justify-content: space-between;
 }
 
-/* MENU */
+/* MENU - liste des liens dans la sidebar */
 .nav-list {
     list-style: none;
     padding: 0;
@@ -32,7 +32,7 @@
     border-radius: 8px;
 }
 
-/* SECTIONS */
+/* SECTIONS - differente partie du menu */
 .menu-header,
 .menu-navigation,
 .menu-footer {
@@ -40,6 +40,28 @@
 }
 
 .menu-footer a {
+    /* Les liens du footer restent blanc sur le fond fonce */
     color: white;
     text-decoration: none;
+}
+
+.menu-footer .alert {
+    margin-bottom: 16px;
+}
+
+.logout-button {
+    /* Bouton de deconnexion dans l'ancien menu */
+    width: 100%;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    background-color: transparent;
+    color: white;
+    cursor: pointer;
+    font: inherit;
+    padding: 10px 20px;
+    text-align: left;
+}
+
+.logout-button:hover {
+    background-color: #334155;
 }
