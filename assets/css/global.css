@@ -30,6 +30,17 @@ body {
     border-color: #d1d5db;
 }
 
+body.auth-page .card {
+    /* Carte auth plus foncee pour mieux se detacher du fond */
+    --bs-card-bg: #eef1f5;
+    background-color: #eef1f5;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12) !important;
+}
+
+body.auth-page .card.border-0 {
+    border: 1px solid #d5dbe4 !important;
+}
+
 .btn-primary {
     /* Couleur des boutons principaux */
     --bs-btn-bg: #2f80ed;
