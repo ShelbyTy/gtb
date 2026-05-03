@@ -1,38 +1,56 @@
 <?php
-
+// Fichiers utilises pour la securite et la connexion a la base
+require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/config/database.php';
 
+// Demarage de la session si besoin
+ensure_session_started();
+
 $erreur = '';
+$username = '';
+$email = '';
+// Token de protection du formulaire
+$csrf_token = get_csrf_token();
 
+// Traitement du formulaire d'inscription
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Verification du token CSRF
+    if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
+        $erreur = "La session a expiré ou la requête est invalide.";
+    }
 
-    $username         = trim($_POST['username']);
-    $email            = trim($_POST['email']);
-    $password         = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
+    // Recuperation des donnee du formulaire
+    $username = trim($_POST['username'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
 
-    if (empty($username) || empty($email) || empty($password) || empty($confirm_password)) {
+    // Verifications de base avant l'insertion en base
+    if ($erreur === '' && ($username === '' || $email === '' || $password === '' || $confirm_password === '')) {
         $erreur = "Tous les champs sont obligatoires.";
-    } elseif ($password !== $confirm_password) {
+    } elseif ($erreur === '' && $password !== $confirm_password) {
         $erreur = "Les mots de passe ne correspondent pas.";
-    } elseif (strlen($password) < 8) {
+    } elseif ($erreur === '' && strlen($password) < 8) {
         $erreur = "Le mot de passe doit contenir au moins 8 caractères.";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif ($erreur === '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $erreur = "L'adresse email n'est pas valide.";
     }
 
-    if (empty($erreur)) {
+    if ($erreur === '') {
+        // Hash du mot de passe avant enregistrement
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         try {
+            // Insertion du nouvelle utilisateur
             $query = $conn->prepare("INSERT INTO users (username, email, passwrd) VALUES (:username, :email, :passwrd)");
             $query->execute([
                 ':username' => $username,
-                ':email'    => $email,
-                ':passwrd'  => $hash
+                ':email' => $email,
+                ':passwrd' => $hash,
             ]);
 
-            header('Location: login.php?inscription=ok');
+            set_flash_message('success', 'Compte créé avec succès, vous pouvez vous connecter.');
+            header('Location: login.php');
             exit();
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
@@ -44,125 +62,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$pageTitle = 'Créer un compte';
+$bodyClass = 'auth-page d-flex align-items-center justify-content-center p-3';
+require_once __DIR__ . '/includes/header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="fr">
+<main class="container">
+    <!-- Carte centrale pour le formulaire d'inscription -->
+    <div class="row justify-content-center">
+        <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-md-5">
+                    <p class="text-secondary fw-medium mb-2">Inscription</p>
+                    <h1 class="h3 fw-bold mb-3">Créer un compte</h1>
+                    <p class="text-secondary mb-4">Remplissez les informations ci-dessous pour créer votre accès.</p>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Créer un compte</title>
+                    <form action="" method="post">
+                        <!-- Token cacher pour proteger le formulaire -->
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+                        <div class="mb-3">
+                            <!-- Nom d'utilisateur qui sera enregistrer en base -->
+                            <label for="username" class="form-label">Nom d'utilisateur</label>
+                            <input type="text" class="form-control" id="username" name="username" value="<?= htmlspecialchars($username) ?>" required>
+                        </div>
 
-    <link rel="stylesheet" href="assets/css/global.css">
-    <link rel="stylesheet" href="assets/css/login.css">
-</head>
+                        <div class="mb-3">
+                            <!-- Adresse email, elle sert aussi a se connecter apres -->
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($email) ?>" required>
+                        </div>
 
-<body class="auth-page">
+                        <div class="mb-3">
+                            <!-- Premier mot de passe taper par l'utilisateur -->
+                            <label for="password" class="form-label">Mot de passe</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control password-input" id="password" name="password" required>
+                                <button class="btn btn-outline-secondary password-toggle" type="button">Afficher</button>
+                            </div>
+                        </div>
 
-    <div class="auth-card">
+                        <div class="mb-4">
+                            <!-- Deuxieme mot de passe pour verifier qu'il a pas fait d'erreur -->
+                            <label for="confirm_password" class="form-label">Confirmer le mot de passe</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control password-input" id="confirm_password" name="confirm_password" required>
+                                <button class="btn btn-outline-secondary password-toggle" type="button">Afficher</button>
+                            </div>
+                        </div>
 
-        <?php if (!empty($erreur)): ?>
-            <div class="alert alert-error">
-                <span class="icon">❌</span>
-                <?= htmlspecialchars($erreur) ?>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold py-2">Créer le compte</button>
+                    </form>
+
+                    <p class="text-center text-secondary mt-4 mb-0">
+                        Déjà un compte ?
+                        <a href="login.php" class="fw-semibold">Se connecter</a>
+                    </p>
+                </div>
             </div>
-        <?php endif; ?>
-
-        <p class="auth-subtitle">Inscription</p>
-        <h1 class="auth-title">Créer un compte</h1>
-        <p class="auth-description">Remplissez les informations ci-dessous pour créer votre accès.</p>
-
-        <form action="" method="post" class="form-login">
-
-            <div class="form-field">
-                <input
-                    type="text"
-                    name="username"
-                    placeholder="Nom d'utilisateur"
-                    value="<?= htmlspecialchars($username ?? '') ?>"
-                    required>
-            </div>
-
-            <div class="form-field">
-                <input
-                    type="email"
-                    name="email"
-                    placeholder="Email"
-                    value="<?= htmlspecialchars($email ?? '') ?>"
-                    required>
-            </div>
-
-            <div class="form-field password-field">
-                <input
-                    type="password"
-                    name="password"
-                    class="password-input"
-                    placeholder="Mot de passe"
-                    required>
-
-                <button
-                    type="button"
-                    class="password-toggle"
-                    aria-label="Afficher le mot de passe"
-                    title="Afficher le mot de passe">👁</button>
-            </div>
-
-            <div class="form-field password-field">
-                <input
-                    type="password"
-                    name="confirm_password"
-                    class="password-input"
-                    placeholder="Confirmer le mot de passe"
-                    required>
-
-                <button
-                    type="button"
-                    class="password-toggle"
-                    aria-label="Afficher le mot de passe"
-                    title="Afficher le mot de passe">👁</button>
-            </div>
-
-            <div class="submit-part">
-                <input type="submit" value="Créer le compte">
-            </div>
-
-        </form>
-
-        <p class="auth-link">
-            Déjà un compte ? <a href="login.php">Se connecter</a>
-        </p>
-
+        </div>
     </div>
+</main>
 
-    <script>
-        document.querySelectorAll('.password-field').forEach(function(field) {
-            const input = field.querySelector('.password-input');
-            const button = field.querySelector('.password-toggle');
+<script>
+    // Meme principe que sur login, on affiche ou cache les mots de passe
+    document.querySelectorAll('.password-toggle').forEach(function(button) {
+        button.addEventListener('click', function() {
+            // Je recupere le champ qui est juste a cote du bouton
+            const input = button.closest('.input-group').querySelector('.password-input');
+            const isHidden = input.type === 'password';
 
-            button.addEventListener('click', function() {
-                const isPasswordHidden = input.type === 'password';
-
-                input.type = isPasswordHidden ? 'text' : 'password';
-                button.textContent = isPasswordHidden ? '👁' : '👁';
-
-                button.setAttribute(
-                    'aria-label',
-                    isPasswordHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
-                );
-
-                button.setAttribute(
-                    'title',
-                    isPasswordHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
-                );
-            });
+            input.type = isHidden ? 'text' : 'password';
+            button.textContent = isHidden ? 'Masquer' : 'Afficher';
         });
-    </script>
+    });
+</script>
 
-</body>
-
-</html>
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -1,4 +1,4 @@
-/* PAGE AUTHENTIFICATION */
+/* Page de connexion / inscription, ancien style garder au cas ou */
 body.auth-page {
     min-height: 100vh;
     min-height: 100dvh;
@@ -9,7 +9,7 @@ body.auth-page {
     background-color: #f0f2f5;
 }
 
-/* CARTE COMMUNE CONNEXION / REGISTER */
+/* Carte centrale reutilisee sur login et register, sa evite de refaire le meme style */
 .auth-card {
     width: 100%;
     max-width: 420px;
@@ -27,7 +27,7 @@ body.auth-page {
     justify-content: center;
 }
 
-/* TITRE ET TEXTE */
+/* Zone titre + petit texte d'introduction */
 .auth-subtitle {
     font-size: 15px;
     font-weight: 500;
@@ -50,14 +50,14 @@ body.auth-page {
     line-height: 1.5;
 }
 
-/* FORMULAIRE */
+/* Organisation vertical du formulaire */
 .form-login {
     display: flex;
     flex-direction: column;
     gap: 16px;
 }
 
-/* CHAMPS */
+/* Apparence generale des champs */
 .form-field,
 .email-part,
 .password-part {
@@ -76,7 +76,7 @@ body.auth-page {
     box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.15);
 }
 
-/* INPUTS */
+/* Style des zone de saisie */
 .form-field input,
 .email-part input,
 .password-part input {
@@ -98,7 +98,7 @@ body.auth-page {
     opacity: 1;
 }
 
-/* CHAMP MOT DE PASSE AVEC OEIL */
+/* Champ mot de passe avec bouton oeil */
 .password-field {
     display: flex;
     align-items: center;
@@ -110,6 +110,7 @@ body.auth-page {
 }
 
 .password-toggle {
+    /* Bouton qui sert a afficher le mot de passe */
     width: 44px;
     height: 100%;
     min-height: 47px;
@@ -124,6 +125,14 @@ body.auth-page {
     transition: color 0.2s ease, background-color 0.2s ease;
 }
 
+.toggle-icon {
+    /* Taille de l'icone si on utilise un oeil plus tard */
+    width: 18px;
+    height: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
 .password-toggle:hover {
     color: #111827;
     background-color: #f3f4f6;
@@ -133,7 +142,7 @@ body.auth-page {
     outline: none;
 }
 
-/* LIGNE SE SOUVENIR / MOT DE PASSE */
+/* Ligne sous le champ mot de passe */
 .remember-row {
     display: flex;
     justify-content: space-between;
@@ -153,6 +162,7 @@ body.auth-page {
     width: 16px;
     height: 16px;
     cursor: pointer;
+    accent-color: #2f80ed;
 }
 
 .remember-left label {
@@ -166,7 +176,19 @@ body.auth-page {
     white-space: nowrap;
 }
 
-/* BOUTON */
+.support-note {
+    /* Petit encadrer d'information pour l'aide */
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border: 1px solid #dbeafe;
+    border-radius: 9px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Bouton principal d'envoie */
 .submit-part {
     margin-top: 6px;
 }
@@ -185,7 +207,29 @@ body.auth-page {
     transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
+.back-button {
+    /* Meme style que le bouton submit mais pour un lien */
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: #2f80ed;
+    color: #ffffff;
+    border: none;
+    border-radius: 9px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 800;
+    font-family: inherit;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
 .submit-part input:hover {
+    background: #256fd1;
+}
+
+.back-button:hover {
     background: #256fd1;
 }
 
@@ -193,7 +237,11 @@ body.auth-page {
     transform: scale(0.99);
 }
 
-/* LIEN BAS DE CARTE */
+.back-button:active {
+    transform: scale(0.99);
+}
+
+/* Lien en bas de la carte */
 .auth-link,
 .register-link {
     text-align: center;
@@ -209,14 +257,15 @@ body.auth-page {
     text-decoration: underline;
 }
 
-/* ALERTES */
+/* Messages d'erreur ou de succes */
 .auth-card .alert {
     margin-bottom: 18px;
     font-size: 14px;
     font-weight: 600;
+    animation: none;
 }
 
-/* RESPONSIVE */
+/* Ajustements sur petit ecran */
 @media (max-width: 600px) {
     body.auth-page {
         padding: 16px;
