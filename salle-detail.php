@@ -8,6 +8,7 @@ $salle = null;
 $capteurs = [];
 $cameras = [];
 $capteurStats = [];
+$capteurMesures = [];
 $erreur = '';
 $capteursInfo = '';
 $camerasInfo = '';
@@ -115,6 +116,36 @@ function get_sensor_stats(PDO $conn, int $capteurId): array
     return $query->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// Recupere toutes les valeurs mesurees pour un capteur
+function get_sensor_measures(PDO $conn, int $capteurId): array
+{
+    if (!table_exists($conn, 'mesures')) {
+        return [];
+    }
+
+    $valueColumn = first_existing_column($conn, 'mesures', ['valeur', 'value', 'mesure']);
+    $dateColumn = first_existing_column($conn, 'mesures', ['created_at', 'date_mesure', 'date']);
+    $typeColumn = first_existing_column($conn, 'mesures', ['type_mesure', 'type', 'nom']);
+
+    if (!$valueColumn || !$dateColumn || !column_exists($conn, 'mesures', 'id_capteur')) {
+        return [];
+    }
+
+    $typeExpression = $typeColumn ? $typeColumn : "'Mesure'";
+    $query = $conn->prepare("
+        SELECT
+            {$typeExpression} AS mesure_type,
+            ROUND({$valueColumn}, 2) AS valeur,
+            {$dateColumn} AS date_mesure
+        FROM mesures
+        WHERE id_capteur = :id_capteur
+        ORDER BY {$dateColumn} DESC
+    ");
+    $query->execute([':id_capteur' => $capteurId]);
+
+    return $query->fetchAll(PDO::FETCH_ASSOC);
+}
+
 $salleId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
 if (!$salleId || $salleId < 1) {
@@ -144,6 +175,7 @@ if ($salle && empty($erreur)) {
 
             foreach ($capteurs as $capteur) {
                 $capteurStats[(int) $capteur['id']] = get_sensor_stats($conn, (int) $capteur['id']);
+                $capteurMesures[(int) $capteur['id']] = get_sensor_measures($conn, (int) $capteur['id']);
             }
 
             if (!table_exists($conn, 'mesures')) {
@@ -228,6 +260,7 @@ require_once __DIR__ . '/includes/navbar.php';
                             <div class="row g-3">
                                 <?php foreach ($capteurs as $capteur): ?>
                                     <?php $stats = $capteurStats[(int) $capteur['id']] ?? []; ?>
+                                    <?php $mesures = $capteurMesures[(int) $capteur['id']] ?? []; ?>
                                     <div class="col-12">
                                         <div class="border rounded p-3">
                                             <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
@@ -246,30 +279,39 @@ require_once __DIR__ . '/includes/navbar.php';
                                                 <?php endif; ?>
                                             </div>
 
-                                            <?php if (!empty($stats)): ?>
+                                            <?php if (!empty($mesures)): ?>
+                                                <div class="row g-2 align-items-end mb-3">
+                                                    <div class="col-12 col-md-4">
+                                                        <label for="measure-type-<?= (int) $capteur['id'] ?>" class="form-label">Type de mesure</label>
+                                                        <select class="form-select sensor-measure-select" id="measure-type-<?= (int) $capteur['id'] ?>" data-capteur-id="<?= (int) $capteur['id'] ?>">
+                                                            <?php foreach ($stats as $statIndex => $stat): ?>
+                                                                <option value="<?= htmlspecialchars($stat['mesure_type']) ?>" <?= $statIndex === 0 ? 'selected' : '' ?>>
+                                                                    <?= htmlspecialchars($stat['mesure_type']) ?>
+                                                                </option>
+                                                            <?php endforeach; ?>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
                                                 <div class="table-responsive">
                                                     <table class="table table-sm table-bordered align-middle mb-0">
                                                         <thead class="table-light">
                                                             <tr>
                                                                 <th>Mesure</th>
-                                                                <th>Dernière valeur</th>
-                                                                <th>Moyenne</th>
-                                                                <th>Minimum</th>
-                                                                <th>Maximum</th>
-                                                                <th>Nombre</th>
-                                                                <th>Dernière date</th>
+                                                                <th>Valeur</th>
+                                                                <th>Date</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            <?php foreach ($stats as $stat): ?>
-                                                                <tr>
-                                                                    <td><?= htmlspecialchars($stat['mesure_type']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['derniere_valeur']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['valeur_moyenne']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['valeur_min']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['valeur_max']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['total_mesures']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $stat['derniere_date']) ?></td>
+                                                            <?php $selectedMeasureType = $stats[0]['mesure_type'] ?? ''; ?>
+                                                            <?php foreach ($mesures as $mesure): ?>
+                                                                <tr
+                                                                    class="sensor-measure-row <?= $mesure['mesure_type'] === $selectedMeasureType ? '' : 'd-none' ?>"
+                                                                    data-capteur-id="<?= (int) $capteur['id'] ?>"
+                                                                    data-mesure-type="<?= htmlspecialchars($mesure['mesure_type']) ?>">
+                                                                    <td><?= htmlspecialchars($mesure['mesure_type']) ?></td>
+                                                                    <td><?= htmlspecialchars((string) $mesure['valeur']) ?></td>
+                                                                    <td><?= htmlspecialchars((string) $mesure['date_mesure']) ?></td>
                                                                 </tr>
                                                             <?php endforeach; ?>
                                                         </tbody>
@@ -352,6 +394,17 @@ require_once __DIR__ . '/includes/navbar.php';
 </main>
 
 <script>
+    document.querySelectorAll('.sensor-measure-select').forEach(function(select) {
+        select.addEventListener('change', function() {
+            const capteurId = select.dataset.capteurId;
+            const selectedType = select.value;
+
+            document.querySelectorAll('.sensor-measure-row[data-capteur-id="' + capteurId + '"]').forEach(function(row) {
+                row.classList.toggle('d-none', row.dataset.mesureType !== selectedType);
+            });
+        });
+    });
+
     // Actualisation modérée pour remettre les statistiques à jour
     setTimeout(function() {
         window.location.reload();
