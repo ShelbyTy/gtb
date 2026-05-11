@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l *)",
+      "Bash(/c/wamp64/bin/php/*/php.exe *)",
+      "Bash(/c/wamp64/bin/mysql/*/bin/mysql.exe *)",
+      "Bash(mysql *)"
+    ]
+  }
+}

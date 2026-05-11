@@ -206,6 +206,22 @@ if ($salle && empty($erreur)) {
     }
 }
 
+// Données capteurs sérialisées pour la détection JS des seuils
+$capteurDataJs = [];
+if ($salle && empty($erreur)) {
+    foreach ($capteurs as $capteur) {
+        $cid = (int) $capteur['id'];
+        foreach ($capteurStats[$cid] ?? [] as $stat) {
+            $capteurDataJs[] = [
+                'capteur_id'      => $cid,
+                'capteur_type'    => $capteur['type'],
+                'type_mesure'     => $stat['mesure_type'],
+                'derniere_valeur' => (float) ($stat['derniere_valeur'] ?? 0),
+            ];
+        }
+    }
+}
+
 $pageTitle = $salle ? 'Salle - ' . $salle['nom'] : 'Détail salle';
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/navbar.php';
@@ -291,6 +307,16 @@ require_once __DIR__ . '/includes/navbar.php';
                                                             <?php endforeach; ?>
                                                         </select>
                                                     </div>
+                                                    <div class="col-12 col-md-4">
+                                                        <label for="seuil-<?= (int) $capteur['id'] ?>" class="form-label">Seuil maximal</label>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            class="form-control seuil-input"
+                                                            id="seuil-<?= (int) $capteur['id'] ?>"
+                                                            data-capteur-id="<?= (int) $capteur['id'] ?>"
+                                                            placeholder="Non défini">
+                                                    </div>
                                                 </div>
 
                                                 <div class="table-responsive">
@@ -303,19 +329,60 @@ require_once __DIR__ . '/includes/navbar.php';
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            <?php $selectedMeasureType = $stats[0]['mesure_type'] ?? ''; ?>
+                                                            <?php
+                                                            $selectedMeasureType = $stats[0]['mesure_type'] ?? '';
+                                                            $typeIndexes = [];
+                                                            ?>
                                                             <?php foreach ($mesures as $mesure): ?>
+                                                                <?php
+                                                                $mType = $mesure['mesure_type'];
+                                                                if (!isset($typeIndexes[$mType])) $typeIndexes[$mType] = 0;
+                                                                $typeIndex = $typeIndexes[$mType]++;
+                                                                $rowHidden = $mType !== $selectedMeasureType || $typeIndex >= 5;
+                                                                ?>
                                                                 <tr
-                                                                    class="sensor-measure-row <?= $mesure['mesure_type'] === $selectedMeasureType ? '' : 'd-none' ?>"
+                                                                    class="sensor-measure-row <?= $rowHidden ? 'd-none' : '' ?>"
                                                                     data-capteur-id="<?= (int) $capteur['id'] ?>"
-                                                                    data-mesure-type="<?= htmlspecialchars($mesure['mesure_type']) ?>">
-                                                                    <td><?= htmlspecialchars($mesure['mesure_type']) ?></td>
+                                                                    data-mesure-type="<?= htmlspecialchars($mType) ?>"
+                                                                    data-type-index="<?= $typeIndex ?>">
+                                                                    <td><?= htmlspecialchars($mType) ?></td>
                                                                     <td><?= htmlspecialchars((string) $mesure['valeur']) ?></td>
                                                                     <td><?= htmlspecialchars((string) $mesure['date_mesure']) ?></td>
                                                                 </tr>
                                                             <?php endforeach; ?>
                                                         </tbody>
                                                     </table>
+                                                </div>
+
+                                                <?php
+                                                $totalParType = [];
+                                                foreach ($mesures as $m) {
+                                                    $totalParType[$m['mesure_type']] = ($totalParType[$m['mesure_type']] ?? 0) + 1;
+                                                }
+                                                $totalDefaut = $totalParType[$selectedMeasureType] ?? 0;
+                                                $maxTotal    = !empty($totalParType) ? max($totalParType) : 0;
+                                                ?>
+                                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="text-secondary small voir-plus-compteur" data-capteur-id="<?= (int) $capteur['id'] ?>">
+                                                            <?= min(5, $totalDefaut) ?> / <?= $totalDefaut ?> mesures affichées
+                                                        </span>
+                                                        <?php if ($maxTotal > 5): ?>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-outline-primary btn-sm voir-plus-btn <?= $totalDefaut <= 5 ? 'd-none' : '' ?>"
+                                                                data-capteur-id="<?= (int) $capteur['id'] ?>"
+                                                                data-visible="5">
+                                                                Voir plus
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-outline-secondary btn-sm voir-moins-btn d-none"
+                                                                data-capteur-id="<?= (int) $capteur['id'] ?>">
+                                                                Voir moins
+                                                            </button>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                             <?php else: ?>
                                                 <div class="alert alert-info mb-0" role="alert">
@@ -394,21 +461,127 @@ require_once __DIR__ . '/includes/navbar.php';
 </main>
 
 <script>
+    var gtbCapteurs = <?= json_encode($capteurDataJs, JSON_UNESCAPED_UNICODE) ?>;
+
+    function applyVisibility(capteurId, selectedType, visible) {
+        var rows = document.querySelectorAll('.sensor-measure-row[data-capteur-id="' + capteurId + '"]');
+        var shown = 0;
+
+        rows.forEach(function(row) {
+            if (row.dataset.mesureType !== selectedType) {
+                row.classList.add('d-none');
+                return;
+            }
+            var idx = parseInt(row.dataset.typeIndex, 10);
+            if (idx < visible) {
+                row.classList.remove('d-none');
+                shown++;
+            } else {
+                row.classList.add('d-none');
+            }
+        });
+
+        var total = Array.from(rows).filter(function(r) {
+            return r.dataset.mesureType === selectedType;
+        }).length;
+
+        var compteur = document.querySelector('.voir-plus-compteur[data-capteur-id="' + capteurId + '"]');
+        if (compteur) {
+            compteur.textContent = shown + ' / ' + total + ' mesures affichées';
+        }
+
+        var btnPlus = document.querySelector('.voir-plus-btn[data-capteur-id="' + capteurId + '"]');
+        if (btnPlus) {
+            btnPlus.dataset.visible = visible;
+            btnPlus.classList.toggle('d-none', shown >= total);
+        }
+
+        var btnMoins = document.querySelector('.voir-moins-btn[data-capteur-id="' + capteurId + '"]');
+        if (btnMoins) {
+            btnMoins.classList.toggle('d-none', visible <= 5);
+        }
+    }
+
     document.querySelectorAll('.sensor-measure-select').forEach(function(select) {
         select.addEventListener('change', function() {
-            const capteurId = select.dataset.capteurId;
-            const selectedType = select.value;
+            var capteurId = select.dataset.capteurId;
+            var selectedType = select.value;
+            applyVisibility(capteurId, selectedType, 5);
 
-            document.querySelectorAll('.sensor-measure-row[data-capteur-id="' + capteurId + '"]').forEach(function(row) {
-                row.classList.toggle('d-none', row.dataset.mesureType !== selectedType);
-            });
+            var seuilInput = document.querySelector('.seuil-input[data-capteur-id="' + capteurId + '"]');
+            if (seuilInput) {
+                var stored = localStorage.getItem('gtb_seuil_' + capteurId + '_' + selectedType);
+                seuilInput.value = stored !== null ? stored : '';
+            }
         });
     });
+
+    document.querySelectorAll('.voir-plus-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var capteurId = btn.dataset.capteurId;
+            var visible = parseInt(btn.dataset.visible, 10) + 10;
+            var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
+            var selectedType = select ? select.value : '';
+            applyVisibility(capteurId, selectedType, visible);
+        });
+    });
+
+    document.querySelectorAll('.voir-moins-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var capteurId = btn.dataset.capteurId;
+            var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
+            var selectedType = select ? select.value : '';
+            applyVisibility(capteurId, selectedType, 5);
+        });
+    });
+
+    // Initialise les champs seuil depuis localStorage
+    document.querySelectorAll('.seuil-input').forEach(function(input) {
+        var capteurId = input.dataset.capteurId;
+        var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
+        if (select) {
+            var stored = localStorage.getItem('gtb_seuil_' + capteurId + '_' + select.value);
+            if (stored !== null) input.value = stored;
+        }
+
+        input.addEventListener('input', function() {
+            var sel = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
+            if (!sel) return;
+            var key = 'gtb_seuil_' + capteurId + '_' + sel.value;
+            if (input.value !== '') {
+                localStorage.setItem(key, input.value);
+            } else {
+                localStorage.removeItem(key);
+            }
+        });
+    });
+
+    // Vérifie les seuils à chaque chargement et envoie une alerte si dépassé
+    if (typeof gtbCapteurs !== 'undefined') {
+        gtbCapteurs.forEach(function(sensor) {
+            var stored = localStorage.getItem('gtb_seuil_' + sensor.capteur_id + '_' + sensor.type_mesure);
+            if (stored === null || stored === '') return;
+            var seuil = parseFloat(stored);
+            if (isNaN(seuil) || sensor.derniere_valeur <= seuil) return;
+
+            fetch('api/create_alert.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id_capteur:  sensor.capteur_id,
+                    valeur:      sensor.derniere_valeur,
+                    seuil:       seuil,
+                    type_mesure: sensor.type_mesure
+                })
+            });
+        });
+    }
 
     // Actualisation modérée pour remettre les statistiques à jour
     setTimeout(function() {
         window.location.reload();
     }, <?= (int) $refreshDelay ?> * 1000);
 </script>
+
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
