@@ -108,3 +108,33 @@ CREATE TABLE IF NOT EXISTS `cameras` (
         FOREIGN KEY (`id_salle`) REFERENCES `salles` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Table : login_attempts
+-- Suivi des tentatives de connexion échouées (anti-brute-force)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+    `id`           INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `ip`           VARCHAR(45)   NOT NULL,
+    `email`        VARCHAR(255)  NOT NULL,
+    `attempted_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_attempts_ip_email`  (`ip`, `email`),
+    KEY `idx_attempts_date`      (`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Table : password_reset_tokens
+-- Tokens à usage unique pour la réinitialisation de mot de passe
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
+    `id`         INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    `email`      VARCHAR(255)  NOT NULL,
+    `token`      VARCHAR(64)   NOT NULL,
+    `expires_at` DATETIME      NOT NULL,
+    `used`       TINYINT(1)    NOT NULL DEFAULT 0,
+    `created_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_token`       (`token`),
+    KEY `idx_reset_email`       (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

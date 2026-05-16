@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !is_valid_csrf_token($_POST['csrf_t
 $_SESSION = [];
 
 // Si la session utilise un cookie, on le supprime aussi
+// On force httponly=true et secure selon le protocole actuel, sans dépendre de php.ini
 if (ini_get('session.use_cookies')) {
     $params = session_get_cookie_params();
     setcookie(
@@ -24,8 +25,8 @@ if (ini_get('session.use_cookies')) {
         time() - 42000,
         $params['path'],
         $params['domain'],
-        $params['secure'],
-        $params['httponly']
+        isset($_SERVER['HTTPS']), // true uniquement en HTTPS, indépendant de php.ini
+        true                      // httponly forcé : protège contre le vol de cookie par XSS
     );
 }
 

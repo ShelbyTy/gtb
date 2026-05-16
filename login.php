@@ -11,8 +11,44 @@ $email = '';
 // Token de protection du formulaire
 $csrf_token = get_csrf_token();
 
-// Traitement du formulaire de connexion
+// --- Fonctions anti-brute-force ---
+
+// Retourne true si l'IP ou l'email a dépassé 5 tentatives dans les 15 dernières minutes
+function is_rate_limited(PDO $conn, string $ip, string $email): bool
+{
+    $window = date('Y-m-d H:i:s', time() - 15 * 60);
+    $stmt = $conn->prepare(
+        "SELECT COUNT(*) FROM login_attempts
+         WHERE (ip = :ip OR email = :email) AND attempted_at > :window"
+    );
+    $stmt->execute([':ip' => $ip, ':email' => $email, ':window' => $window]);
+    return (int) $stmt->fetchColumn() >= 5;
+}
+
+// Enregistre une tentative échouée en base
+function record_failed_attempt(PDO $conn, string $ip, string $email): void
+{
+    $stmt = $conn->prepare(
+        "INSERT INTO login_attempts (ip, email) VALUES (:ip, :email)"
+    );
+    $stmt->execute([':ip' => $ip, ':email' => $email]);
+}
+
+// Supprime les tentatives après une connexion réussie
+function clear_failed_attempts(PDO $conn, string $ip, string $email): void
+{
+    $stmt = $conn->prepare(
+        "DELETE FROM login_attempts WHERE ip = :ip AND email = :email"
+    );
+    $stmt->execute([':ip' => $ip, ':email' => $email]);
+}
+
+// --- Traitement du formulaire de connexion ---
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // L'IP est capturée immédiatement, elle sert au rate-limiting quel que soit le résultat
+    $clientIp = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
     // Verification du token CSRF
     if (!is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
         $erreur = "La session a expiré ou la requête est invalide.";
@@ -30,6 +66,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($erreur === '') {
+        // Vérification du rate-limit AVANT la requête BDD utilisateur
+        // Bloque après 5 échecs sur la même IP ou le même email en 15 minutes
+        if (is_rate_limited($conn, $clientIp, $email)) {
+            $erreur = "Trop de tentatives échouées. Veuillez réessayer dans 15 minutes.";
+        }
+    }
+
+    if ($erreur === '') {
         try {
             // Recherche de l'utilisateur avec son email
             $query = $conn->prepare("SELECT id, email, passwrd FROM users WHERE email = :email");
@@ -39,7 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // password_verify compare le mot de passe tapé avec le hash stocké en base
             // on stocke jamais le vrai mot de passe, juste le hash, c'est plus securisé
             if ($user && password_verify($password, $user['passwrd'])) {
-                // Si le mot de passe est bon, on connecte l'utilisateur
+                // Connexion réussie : nettoyer les tentatives et régénérer la session
+                clear_failed_attempts($conn, $clientIp, $email);
+
                 // session_regenerate_id empeche le "session fixation", vu en cours
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $user['id'];
@@ -49,6 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit();
             }
 
+            // Echec : enregistrer la tentative pour le rate-limiting
+            record_failed_attempt($conn, $clientIp, $email);
             $erreur = "Identifiants incorrects.";
         } catch (PDOException $e) {
             $erreur = "Une erreur est survenue, veuillez réessayer.";
@@ -90,13 +138,7 @@ require_once __DIR__ . '/includes/header.php';
                             </div>
                         </div>
 
-                        <div class="d-flex justify-content-between align-items-center gap-3 mb-4 flex-wrap">
-                            <!-- Option garder en affichage, elle pourra servir plus tard -->
-                            <div class="form-check mb-0">
-                                <input class="form-check-input" type="checkbox" id="rememberme" name="rememberme">
-                                <label class="form-check-label" for="rememberme">Se souvenir de moi</label>
-                            </div>
-
+                        <div class="d-flex justify-content-end mb-4">
                             <a href="forgot-password.php" class="link-primary">Mot de passe oublié ?</a>
                         </div>
 

@@ -30,8 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $erreur = "Tous les champs sont obligatoires.";
     } elseif ($erreur === '' && $password !== $confirm_password) {
         $erreur = "Les mots de passe ne correspondent pas.";
-    } elseif ($erreur === '' && strlen($password) < 8) {
-        $erreur = "Le mot de passe doit contenir au moins 8 caractères.";
+    } elseif ($erreur === '' && !preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/', $password)) {
+        $erreur = "Le mot de passe doit contenir au moins 8 caractères, une majuscule et un chiffre.";
     } elseif ($erreur === '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $erreur = "L'adresse email n'est pas valide.";
     }

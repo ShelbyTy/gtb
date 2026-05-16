@@ -1,9 +1,19 @@
 <?php
 
 // Fonction pour ouvrir la session sans la relancer deux fois
+// Configure les flags du cookie AVANT session_start() pour que le navigateur
+// refuse de lire/envoyer le cookie via JavaScript (httponly) et sur HTTP (secure)
 function ensure_session_started(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        session_set_cookie_params([
+            'lifetime' => 0,                        // cookie de session (expire à la fermeture du navigateur)
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => isset($_SERVER['HTTPS']), // true uniquement en HTTPS
+            'httponly' => true,                     // inaccessible via JavaScript → bloque le vol de session par XSS
+            'samesite' => 'Strict',                 // bloque l'envoi cross-site → protège contre le CSRF
+        ]);
         session_start();
     }
 }
