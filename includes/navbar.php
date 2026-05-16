@@ -31,6 +31,31 @@ $navItems = [
     'cameras.php' => 'Caméras',
     'alertes.php' => 'Alertes',
 ];
+
+// Recupere les 10 dernieres alertes non résolues pour la cloche
+$navAlertes = [];
+$navAlertesCount = 0;
+try {
+    $navQuery = $conn->query("
+        SELECT
+            a.id,
+            a.type_alerte,
+            a.niveau,
+            a.created_at,
+            c.type  AS capteur_type,
+            s.nom   AS salle_nom
+        FROM alertes a
+        JOIN capteurs c ON c.id = a.id_capteur
+        JOIN salles   s ON s.id = c.id_salle
+        WHERE a.is_resolved = 0
+        ORDER BY a.created_at DESC
+        LIMIT 10
+    ");
+    $navAlertes = $navQuery->fetchAll(PDO::FETCH_ASSOC);
+    $navAlertesCount = count($navAlertes);
+} catch (PDOException $e) {
+    // si la table n'existe pas encore on affiche juste rien
+}
 ?>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
@@ -55,20 +80,61 @@ $navItems = [
                 <?php endforeach; ?>
             </ul>
 
-            <!-- Barre de recherche simple pour retrouver une fonction du site -->
-            <form class="d-flex me-lg-3 mb-2 mb-lg-0" role="search" id="navbarSearchForm">
-                <input class="form-control form-control-sm me-2" type="search" id="navbarSearchInput" placeholder="Rechercher" aria-label="Rechercher une fonction" list="navbarSearchList">
-                <datalist id="navbarSearchList">
-                    <option value="Tableau de bord">
-                    <option value="Salles">
-                    <option value="Caméras">
-                    <option value="Alertes">
-                </datalist>
-                <button class="btn btn-outline-light btn-sm" type="submit">OK</button>
-            </form>
+<!-- Cloche de notifications + menu utilisateur -->
+            <ul class="navbar-nav ms-auto align-items-center gap-2">
 
-            <!-- Menu utilisateur avec le nom et la déconnexion -->
-            <ul class="navbar-nav ms-auto">
+                <!-- Cloche avec badge et dropdown des alertes actives -->
+                <li class="nav-item dropdown">
+                    <button class="btn btn-outline-light btn-sm position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-bell"></i>
+                        <?php if ($navAlertesCount > 0): ?>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                <?= $navAlertesCount ?>
+                            </span>
+                        <?php endif; ?>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end p-0" style="min-width: 320px; max-height: 400px; overflow-y: auto;">
+                        <!-- En-tête du dropdown -->
+                        <li class="dropdown-header d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                            <span class="fw-semibold">Notifications</span>
+                            <?php if ($navAlertesCount > 0): ?>
+                                <span class="badge bg-danger"><?= $navAlertesCount ?></span>
+                            <?php endif; ?>
+                        </li>
+
+                        <?php if (empty($navAlertes)): ?>
+                            <li class="px-3 py-3 text-secondary small">Aucune notification active</li>
+                        <?php else: ?>
+                            <?php foreach ($navAlertes as $navAlerte): ?>
+                                <?php
+                                $badgeClass = match ($navAlerte['niveau']) {
+                                    'critical' => 'danger',
+                                    'info'     => 'primary',
+                                    default    => 'warning',
+                                };
+                                ?>
+                                <li>
+                                    <a class="dropdown-item py-2 border-bottom" href="alertes.php">
+                                        <div class="d-flex align-items-start gap-2">
+                                            <span class="badge text-bg-<?= $badgeClass ?> mt-1 flex-shrink-0"><?= htmlspecialchars(ucfirst($navAlerte['niveau'])) ?></span>
+                                            <div class="overflow-hidden">
+                                                <div class="fw-semibold small text-truncate"><?= htmlspecialchars($navAlerte['type_alerte']) ?></div>
+                                                <div class="text-secondary" style="font-size: .75rem;"><?= htmlspecialchars($navAlerte['salle_nom']) ?> — <?= htmlspecialchars($navAlerte['capteur_type']) ?></div>
+                                                <div class="text-secondary" style="font-size: .7rem;"><?= htmlspecialchars($navAlerte['created_at']) ?></div>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <!-- Lien vers la page complète -->
+                        <li class="px-3 py-2 text-center border-top">
+                            <a href="alertes.php" class="small text-primary">Voir toutes les alertes</a>
+                        </li>
+                    </ul>
+                </li>
                 <li class="nav-item dropdown">
                     <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <?= htmlspecialchars($username) ?>
@@ -87,33 +153,3 @@ $navItems = [
     </div>
 </nav>
 
-<script>
-    // Petite recherche simple, elle envoie vers la page qui correspond au mot tapé
-    document.getElementById('navbarSearchForm').addEventListener('submit', function(event) {
-        event.preventDefault();
-
-        const searchValue = document.getElementById('navbarSearchInput').value.trim().toLowerCase();
-        const pages = {
-            'tableau de bord': 'dashboard.php',
-            'dashboard': 'dashboard.php',
-            'accueil': 'dashboard.php',
-            'salle': 'salles.php',
-            'salles': 'salles.php',
-            'capteur': 'salles.php',
-            'capteurs': 'salles.php',
-            'camera': 'cameras.php',
-            'caméra': 'cameras.php',
-            'cameras': 'cameras.php',
-            'caméras': 'cameras.php',
-            'alerte': 'alertes.php',
-            'alertes': 'alertes.php'
-        };
-
-        if (pages[searchValue]) {
-            window.location.href = pages[searchValue];
-            return;
-        }
-
-        alert('Aucune fonction trouvée.');
-    });
-</script>
