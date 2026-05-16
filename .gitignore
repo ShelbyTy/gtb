@@ -1,0 +1,20 @@
+# Outils locaux
+.claude/
+
+# Fichiers système
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Variables d'environnement
+.env
+.env.local
