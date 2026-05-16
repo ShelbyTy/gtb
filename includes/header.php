@@ -18,6 +18,8 @@ if (!$toastMessage && !empty($erreur)) {
 $toastType = $toastMessage['type'] ?? 'success';
 $toastClass = $toastType === 'success' ? 'text-bg-success' : 'text-bg-danger';
 $toastTitle = $toastType === 'success' ? 'Réussite' : 'Erreur';
+// filemtime retourne la date de modification du fichier CSS
+// ca force le navigateur a re-télécharger le CSS quand on le modifie (cache busting)
 $globalCssVersion = filemtime(__DIR__ . '/../assets/css/global.css');
 ?>
 <!DOCTYPE html>

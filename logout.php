@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/security.php';
 ensure_session_started();
 
 // La déconnexion doit arriver en POST avec le bon token sinon retour dashboard
+// ca empeche quelqu'un de deconnecter un autre utilisateur juste en lui envoyant un lien
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !is_valid_csrf_token($_POST['csrf_token'] ?? null)) {
     header('Location: dashboard.php');
     exit();

@@ -25,6 +25,8 @@ function is_valid_csrf_token(?string $token): bool
 {
     ensure_session_started();
 
+    // hash_equals compare les deux chaines de maniere securisée
+    // ca evite les attaques "timing attack" contrairement a == ou ===
     return is_string($token)
         && isset($_SESSION['csrf_token'])
         && hash_equals($_SESSION['csrf_token'], $token);

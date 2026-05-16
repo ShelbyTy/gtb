@@ -38,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($erreur === '') {
         // Hash du mot de passe avant enregistrement
+        // PASSWORD_DEFAULT utilise bcrypt, c'est l'algo recommandé pour les mots de passe
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         try {

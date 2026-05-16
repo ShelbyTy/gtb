@@ -6,7 +6,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // Si aucun utilisateur est en session, il faut retourner a la connexion
+// empty() gere aussi le cas ou la clé n'existe pas, du coup pas besoin de isset() en plus
 if (empty($_SESSION['user_id'])) {
     header('Location: login.php');
-    exit();
+    exit(); // le exit est important sinon le reste de la page s'execute quand meme
 }

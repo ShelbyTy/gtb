@@ -9,7 +9,9 @@ $erreur = '';
 
 try {
     // On récupère les salles sans les écrire en dur dans le code
+    // ORDER BY nom ASC pour avoir un ordre alphabetique dans la liste
     $query = $conn->query("SELECT id, nom, type, open_for_all FROM salles ORDER BY nom ASC");
+    // FETCH_ASSOC retourne un tableau associatif, plus pratique que les index numériques
     $salles = $query->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $erreur = "Impossible de récupérer la liste des salles.";

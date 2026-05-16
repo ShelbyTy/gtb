@@ -16,6 +16,7 @@ $mesuresInfo = '';
 $refreshDelay = 30;
 
 // Vérifie si une table existe dans la base courante
+// j'utilise information_schema qui est une base MySQL qui contient les infos sur les autres bases
 function table_exists(PDO $conn, string $tableName): bool
 {
     $query = $conn->prepare("
@@ -26,10 +27,12 @@ function table_exists(PDO $conn, string $tableName): bool
     ");
     $query->execute([':table_name' => $tableName]);
 
+    // si le COUNT retourne plus de 0 la table existe
     return (int) $query->fetchColumn() > 0;
 }
 
 // Vérifie si une colonne existe dans une table
+// pareil que table_exists mais pour les colonnes
 function column_exists(PDO $conn, string $tableName, string $columnName): bool
 {
     $query = $conn->prepare("
@@ -48,15 +51,16 @@ function column_exists(PDO $conn, string $tableName, string $columnName): bool
 }
 
 // Renvoie la première colonne trouvée dans une liste possible
+// utile car le nom des colonnes peut varier selon comment la table a ete creee
 function first_existing_column(PDO $conn, string $tableName, array $columns): ?string
 {
     foreach ($columns as $column) {
         if (column_exists($conn, $tableName, $column)) {
-            return $column;
+            return $column; // on prend la premiere qui existe et on s'arrete
         }
     }
 
-    return null;
+    return null; // aucune colonne trouvée
 }
 
 // Petit helper pour afficher une valeur si la colonne existe
@@ -81,6 +85,8 @@ function get_sensor_stats(PDO $conn, int $capteurId): array
     }
 
     if ($typeColumn) {
+        // GROUP_CONCAT + SUBSTRING_INDEX c'est une astuce pour recuperer la derniere valeur
+        // c'est un peu bizarre mais ca evite une sous-requete
         $query = $conn->prepare("
             SELECT
                 {$typeColumn} AS mesure_type,

@@ -10,7 +10,7 @@ require_once __DIR__ . '/includes/navbar.php';
 ?>
 
 <main class="container page-shell">
-    <!-- Contenu de la page cameras, elle est encore simple pour le moment -->
+    <!-- Page cameras, pour l'instant y'a rien de branché donc on affiche juste un message -->
     <div class="card shadow-sm">
         <div class="card-body p-4">
             <h1 class="h3 fw-bold mb-3">Caméras</h1>
@@ -18,7 +18,7 @@ require_once __DIR__ . '/includes/navbar.php';
                 Cette page est prévue pour regrouper les caméras du projet GTB.
             </p>
 
-            <!-- Info afficher car les flux video ne sont pas brancher encore -->
+            <!-- Alerte informative, a remplacer quand on aura les vrais flux video -->
             <div class="alert alert-warning mb-0" role="alert">
                 Aucun flux caméra n'est encore configuré.
             </div>

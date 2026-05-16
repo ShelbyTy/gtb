@@ -36,8 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $query->execute([':email' => $email]);
             $user = $query->fetch(PDO::FETCH_ASSOC);
 
+            // password_verify compare le mot de passe tapé avec le hash stocké en base
+            // on stocke jamais le vrai mot de passe, juste le hash, c'est plus securisé
             if ($user && password_verify($password, $user['passwrd'])) {
                 // Si le mot de passe est bon, on connecte l'utilisateur
+                // session_regenerate_id empeche le "session fixation", vu en cours
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $user['id'];
                 set_flash_message('success', 'Connexion réussie.');

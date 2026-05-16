@@ -66,10 +66,12 @@ require_once __DIR__ . '/includes/navbar.php';
                         <div class="list-group">
                             <?php foreach ($alertes as $alerte): ?>
                                 <?php
+                                // match() permet de choisir la couleur Bootstrap selon le niveau de l'alerte
+                                // c'est comme un switch mais en plus court
                                 $niveauClass = match ($alerte['niveau']) {
                                     'critical' => 'danger',
                                     'info'     => 'primary',
-                                    default    => 'warning',
+                                    default    => 'warning', // warning si le niveau est pas reconnu
                                 };
                                 $resolved = (int) $alerte['is_resolved'] === 1;
                                 ?>

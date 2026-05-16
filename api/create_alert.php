@@ -51,6 +51,8 @@ try {
     }
 
     $message = sprintf('%s : %.2f (seuil configuré : %.2f)', $typeMesure, $valeur, $seuil);
+    // si la valeur depasse 1.5 fois le seuil c'est critique, sinon c'est juste un warning
+    // le 1.5 c'est moi qui l'ai choisi, ca peut etre ajusté selon les besoins
     $niveau  = ($valeur >= $seuil * 1.5) ? 'critical' : 'warning';
 
     $insert = $conn->prepare("
