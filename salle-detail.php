@@ -1,593 +1,257 @@
 <?php
-// Page de détail pour une salle précise
+// Page de détail d'une salle : capteurs, mesures et caméras
 require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/includes/auth_check.php';
 require_once __DIR__ . '/config/database.php';
 
-$salle = null;
-$capteurs = [];
-$cameras = [];
-$capteurStats = [];
-$capteurMesures = [];
-$erreur = '';
-$capteursInfo = '';
-$camerasInfo = '';
-$mesuresInfo = '';
-$refreshDelay = 30;
-
-// Vérifie si une table existe dans la base courante
-// j'utilise information_schema qui est une base MySQL qui contient les infos sur les autres bases
-function table_exists(PDO $conn, string $tableName): bool
-{
-    $query = $conn->prepare("
-        SELECT COUNT(*)
-        FROM information_schema.TABLES
-        WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = :table_name
-    ");
-    $query->execute([':table_name' => $tableName]);
-
-    // si le COUNT retourne plus de 0 la table existe
-    return (int) $query->fetchColumn() > 0;
-}
-
-// Vérifie si une colonne existe dans une table
-// pareil que table_exists mais pour les colonnes
-function column_exists(PDO $conn, string $tableName, string $columnName): bool
-{
-    $query = $conn->prepare("
-        SELECT COUNT(*)
-        FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = :table_name
-        AND COLUMN_NAME = :column_name
-    ");
-    $query->execute([
-        ':table_name' => $tableName,
-        ':column_name' => $columnName,
-    ]);
-
-    return (int) $query->fetchColumn() > 0;
-}
-
-// Renvoie la première colonne trouvée dans une liste possible
-// utile car le nom des colonnes peut varier selon comment la table a ete creee
-function first_existing_column(PDO $conn, string $tableName, array $columns): ?string
-{
-    foreach ($columns as $column) {
-        if (column_exists($conn, $tableName, $column)) {
-            return $column; // on prend la premiere qui existe et on s'arrete
-        }
-    }
-
-    return null; // aucune colonne trouvée
-}
-
-// Petit helper pour afficher une valeur si la colonne existe
-function array_value(array $row, string $key, string $default = ''): string
-{
-    return isset($row[$key]) && $row[$key] !== '' ? (string) $row[$key] : $default;
-}
-
-// Récupère les statistiques d'un capteur si la table mesures existe
-function get_sensor_stats(PDO $conn, int $capteurId): array
-{
-    if (!table_exists($conn, 'mesures')) {
-        return [];
-    }
-
-    $valueColumn = first_existing_column($conn, 'mesures', ['valeur', 'value', 'mesure']);
-    $dateColumn = first_existing_column($conn, 'mesures', ['created_at', 'date_mesure', 'date']);
-    $typeColumn = first_existing_column($conn, 'mesures', ['type_mesure', 'type', 'nom']);
-
-    if (!$valueColumn || !$dateColumn || !column_exists($conn, 'mesures', 'id_capteur')) {
-        return [];
-    }
-
-    if ($typeColumn) {
-        // GROUP_CONCAT + SUBSTRING_INDEX c'est une astuce pour recuperer la derniere valeur
-        // c'est un peu bizarre mais ca evite une sous-requete
-        $query = $conn->prepare("
-            SELECT
-                {$typeColumn} AS mesure_type,
-                COUNT(*) AS total_mesures,
-                ROUND(MIN({$valueColumn}), 2) AS valeur_min,
-                ROUND(MAX({$valueColumn}), 2) AS valeur_max,
-                ROUND(AVG({$valueColumn}), 2) AS valeur_moyenne,
-                SUBSTRING_INDEX(GROUP_CONCAT({$valueColumn} ORDER BY {$dateColumn} DESC SEPARATOR ','), ',', 1) AS derniere_valeur,
-                MAX({$dateColumn}) AS derniere_date
-            FROM mesures
-            WHERE id_capteur = :id_capteur
-            GROUP BY {$typeColumn}
-            ORDER BY {$typeColumn} ASC
-        ");
-    } else {
-        $query = $conn->prepare("
-            SELECT
-                'Mesure' AS mesure_type,
-                COUNT(*) AS total_mesures,
-                ROUND(MIN({$valueColumn}), 2) AS valeur_min,
-                ROUND(MAX({$valueColumn}), 2) AS valeur_max,
-                ROUND(AVG({$valueColumn}), 2) AS valeur_moyenne,
-                SUBSTRING_INDEX(GROUP_CONCAT({$valueColumn} ORDER BY {$dateColumn} DESC SEPARATOR ','), ',', 1) AS derniere_valeur,
-                MAX({$dateColumn}) AS derniere_date
-            FROM mesures
-            WHERE id_capteur = :id_capteur
-            GROUP BY id_capteur
-        ");
-    }
-
-    $query->execute([':id_capteur' => $capteurId]);
-
-    return $query->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// Recupere toutes les valeurs mesurees pour un capteur
-function get_sensor_measures(PDO $conn, int $capteurId): array
-{
-    if (!table_exists($conn, 'mesures')) {
-        return [];
-    }
-
-    $valueColumn = first_existing_column($conn, 'mesures', ['valeur', 'value', 'mesure']);
-    $dateColumn = first_existing_column($conn, 'mesures', ['created_at', 'date_mesure', 'date']);
-    $typeColumn = first_existing_column($conn, 'mesures', ['type_mesure', 'type', 'nom']);
-
-    if (!$valueColumn || !$dateColumn || !column_exists($conn, 'mesures', 'id_capteur')) {
-        return [];
-    }
-
-    $typeExpression = $typeColumn ? $typeColumn : "'Mesure'";
-    $query = $conn->prepare("
-        SELECT
-            {$typeExpression} AS mesure_type,
-            ROUND({$valueColumn}, 2) AS valeur,
-            {$dateColumn} AS date_mesure
-        FROM mesures
-        WHERE id_capteur = :id_capteur
-        ORDER BY {$dateColumn} DESC
-    ");
-    $query->execute([':id_capteur' => $capteurId]);
-
-    return $query->fetchAll(PDO::FETCH_ASSOC);
-}
-
+// Validation de l'ID passé dans l'URL (?id=3)
+// FILTER_VALIDATE_INT retourne false si ce n'est pas un entier valide
 $salleId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
 if (!$salleId || $salleId < 1) {
-    $erreur = "Identifiant de salle invalide.";
-} else {
-    try {
-        // On récupère la salle demandée
-        $query = $conn->prepare("SELECT id, nom, type, open_for_all FROM salles WHERE id = :id");
-        $query->execute([':id' => $salleId]);
-        $salle = $query->fetch(PDO::FETCH_ASSOC);
-
-        if (!$salle) {
-            $erreur = "Salle introuvable.";
-        }
-    } catch (PDOException $e) {
-        $erreur = "Impossible de récupérer les informations de la salle.";
-    }
+    die('Identifiant de salle invalide.');
 }
 
-if ($salle && empty($erreur)) {
-    try {
-        if (column_exists($conn, 'capteurs', 'id_salle')) {
-            // Si la colonne id_salle existe, on peut relier les capteurs à la salle
-            $query = $conn->prepare("SELECT id, type, is_connected, id_arduino, unite FROM capteurs WHERE id_salle = :id_salle ORDER BY type ASC");
-            $query->execute([':id_salle' => $salleId]);
-            $capteurs = $query->fetchAll(PDO::FETCH_ASSOC);
+// On récupère la salle — si elle n'existe pas, inutile de continuer
+$req = $conn->prepare("SELECT id, nom, type, open_for_all FROM salles WHERE id = :id");
+$req->execute([':id' => $salleId]);
+$salle = $req->fetch(PDO::FETCH_ASSOC);
 
-            foreach ($capteurs as $capteur) {
-                $capteurStats[(int) $capteur['id']] = get_sensor_stats($conn, (int) $capteur['id']);
-                $capteurMesures[(int) $capteur['id']] = get_sensor_measures($conn, (int) $capteur['id']);
-            }
-
-            if (!table_exists($conn, 'mesures')) {
-                $mesuresInfo = "La table mesures n'existe pas encore. Les statistiques apparaîtront quand elle sera créée et remplie.";
-            }
-        } else {
-            $capteursInfo = "La table capteurs existe, mais elle n'a pas encore de colonne id_salle pour relier les capteurs aux salles.";
-        }
-    } catch (PDOException $e) {
-        $capteursInfo = "Impossible de récupérer les capteurs de cette salle.";
-    }
-
-    try {
-        if (table_exists($conn, 'cameras')) {
-            if (column_exists($conn, 'cameras', 'id_salle')) {
-                // La table cameras peut avoir plusieurs formes, donc on récupère toutes ses colonnes
-                $query = $conn->prepare("SELECT * FROM cameras WHERE id_salle = :id_salle ORDER BY id ASC");
-                $query->execute([':id_salle' => $salleId]);
-                $cameras = $query->fetchAll(PDO::FETCH_ASSOC);
-            } else {
-                $camerasInfo = "La table cameras existe, mais elle n'a pas encore de colonne id_salle.";
-            }
-        } else {
-            $camerasInfo = "La table cameras n'existe pas encore dans la base de données.";
-        }
-    } catch (PDOException $e) {
-        $camerasInfo = "Impossible de récupérer les caméras de cette salle.";
-    }
+if (!$salle) {
+    die('Salle introuvable.');
 }
 
-// Données capteurs sérialisées pour la détection JS des seuils
-$capteurDataJs = [];
-if ($salle && empty($erreur)) {
-    foreach ($capteurs as $capteur) {
-        $cid = (int) $capteur['id'];
-        foreach ($capteurStats[$cid] ?? [] as $stat) {
-            $capteurDataJs[] = [
-                'capteur_id'      => $cid,
-                'capteur_type'    => $capteur['type'],
-                'type_mesure'     => $stat['mesure_type'],
-                'derniere_valeur' => (float) ($stat['derniere_valeur'] ?? 0),
-            ];
-        }
-    }
+// Tous les capteurs rattachés à cette salle
+$req = $conn->prepare("
+    SELECT id, type, unite, id_arduino, is_connected
+    FROM capteurs
+    WHERE id_salle = :id_salle
+    ORDER BY type ASC
+");
+$req->execute([':id_salle' => $salleId]);
+$capteurs = $req->fetchAll(PDO::FETCH_ASSOC);
+
+// Pour chaque capteur : stats + 10 dernières mesures
+$capteurStats   = [];
+$capteurMesures = [];
+
+foreach ($capteurs as $capteur) {
+    $cid = (int) $capteur['id'];
+
+    // Statistiques groupées par type de mesure (température, CO2, etc.)
+    $req = $conn->prepare("
+        SELECT
+            type_mesure,
+            COUNT(*)                AS total,
+            ROUND(MIN(valeur), 2)   AS valeur_min,
+            ROUND(MAX(valeur), 2)   AS valeur_max,
+            ROUND(AVG(valeur), 2)   AS valeur_moyenne
+        FROM mesures
+        WHERE id_capteur = :id_capteur
+        GROUP BY type_mesure
+        ORDER BY type_mesure ASC
+    ");
+    $req->execute([':id_capteur' => $cid]);
+    $capteurStats[$cid] = $req->fetchAll(PDO::FETCH_ASSOC);
+
+    // Les 10 mesures les plus récentes pour l'historique
+    $req = $conn->prepare("
+        SELECT type_mesure, ROUND(valeur, 2) AS valeur, created_at
+        FROM mesures
+        WHERE id_capteur = :id_capteur
+        ORDER BY created_at DESC
+        LIMIT 10
+    ");
+    $req->execute([':id_capteur' => $cid]);
+    $capteurMesures[$cid] = $req->fetchAll(PDO::FETCH_ASSOC);
 }
 
-$pageTitle = $salle ? 'Salle - ' . $salle['nom'] : 'Détail salle';
+// Caméras installées dans la salle
+$req = $conn->prepare("
+    SELECT id, nom, url_flux, camera_status
+    FROM cameras
+    WHERE id_salle = :id_salle
+    ORDER BY id ASC
+");
+$req->execute([':id_salle' => $salleId]);
+$cameras = $req->fetchAll(PDO::FETCH_ASSOC);
+
+$pageTitle = 'Salle - ' . $salle['nom'];
 require_once __DIR__ . '/includes/header.php';
 require_once __DIR__ . '/includes/navbar.php';
 ?>
 
 <main class="container page-shell">
     <div class="row g-4">
+
+        <!-- En-tête de la salle -->
         <div class="col-12">
             <a href="salles.php" class="btn btn-outline-primary btn-sm mb-3">Retour aux salles</a>
 
-            <?php if (!empty($erreur)): ?>
-                <div class="alert alert-danger mb-0" role="alert">
-                    <?= htmlspecialchars($erreur) ?>
-                </div>
-            <?php else: ?>
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="d-flex justify-content-between gap-3 flex-wrap">
-                            <div>
-                                <h1 class="h3 fw-bold mb-2"><?= htmlspecialchars($salle['nom']) ?></h1>
-                                <p class="text-secondary mb-2">Type : <?= htmlspecialchars($salle['type']) ?></p>
-
-                                <?php if ((int) $salle['open_for_all'] === 1): ?>
-                                    <span class="badge text-bg-success">Ouverte à tous</span>
-                                <?php else: ?>
-                                    <span class="badge text-bg-secondary">Accès limité</span>
-                                <?php endif; ?>
-                            </div>
-
-                            <p class="text-secondary small mb-0">
-                                Actualisation automatique : <?= (int) $refreshDelay ?> secondes
-                            </p>
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                        <div>
+                            <h1 class="h3 fw-bold mb-1"><?= htmlspecialchars($salle['nom']) ?></h1>
+                            <p class="text-secondary mb-2">Type : <?= htmlspecialchars($salle['type']) ?></p>
+                            <?php if ((int) $salle['open_for_all'] === 1): ?>
+                                <span class="badge text-bg-success">Ouverte à tous</span>
+                            <?php else: ?>
+                                <span class="badge text-bg-secondary">Accès limité</span>
+                            <?php endif; ?>
                         </div>
+                        <p class="text-secondary small mb-0">Actualisation automatique : 30 s</p>
                     </div>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
 
-        <?php if ($salle && empty($erreur)): ?>
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <h2 class="h5 fw-bold mb-3">Mesures et statistiques des capteurs</h2>
+        <!-- Section capteurs -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-3">Capteurs et mesures</h2>
 
-                        <?php if (!empty($mesuresInfo)): ?>
-                            <div class="alert alert-warning" role="alert">
-                                <?= htmlspecialchars($mesuresInfo) ?>
-                            </div>
-                        <?php endif; ?>
+                    <?php if (empty($capteurs)): ?>
+                        <div class="alert alert-info mb-0">Aucun capteur rattaché à cette salle.</div>
+                    <?php else: ?>
+                        <div class="row g-3">
+                            <?php foreach ($capteurs as $capteur): ?>
+                                <?php
+                                $cid     = (int) $capteur['id'];
+                                $stats   = $capteurStats[$cid];
+                                $mesures = $capteurMesures[$cid];
+                                ?>
+                                <div class="col-12">
+                                    <div class="border rounded p-3">
 
-                        <?php if (!empty($capteurs)): ?>
-                            <div class="row g-3">
-                                <?php foreach ($capteurs as $capteur): ?>
-                                    <?php $stats = $capteurStats[(int) $capteur['id']] ?? []; ?>
-                                    <?php $mesures = $capteurMesures[(int) $capteur['id']] ?? []; ?>
-                                    <div class="col-12">
-                                        <div class="border rounded p-3">
-                                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-                                                <div>
-                                                    <h3 class="h6 fw-bold mb-1"><?= htmlspecialchars($capteur['type']) ?></h3>
-                                                    <p class="text-secondary mb-0">
-                                                        Unité : <?= htmlspecialchars($capteur['unite']) ?> |
-                                                        Arduino : <?= htmlspecialchars((string) $capteur['id_arduino']) ?>
-                                                    </p>
-                                                </div>
-
-                                                <?php if ((int) $capteur['is_connected'] === 1): ?>
-                                                    <span class="badge text-bg-success">Connecté</span>
-                                                <?php else: ?>
-                                                    <span class="badge text-bg-danger">Déconnecté</span>
-                                                <?php endif; ?>
-                                            </div>
-
-                                            <?php if (!empty($mesures)): ?>
-                                                <div class="row g-2 align-items-end mb-3">
-                                                    <div class="col-12 col-md-4">
-                                                        <label for="measure-type-<?= (int) $capteur['id'] ?>" class="form-label">Type de mesure</label>
-                                                        <select class="form-select sensor-measure-select" id="measure-type-<?= (int) $capteur['id'] ?>" data-capteur-id="<?= (int) $capteur['id'] ?>">
-                                                            <?php foreach ($stats as $statIndex => $stat): ?>
-                                                                <option value="<?= htmlspecialchars($stat['mesure_type']) ?>" <?= $statIndex === 0 ? 'selected' : '' ?>>
-                                                                    <?= htmlspecialchars($stat['mesure_type']) ?>
-                                                                </option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-12 col-md-4">
-                                                        <label for="seuil-<?= (int) $capteur['id'] ?>" class="form-label">Seuil maximal</label>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            class="form-control seuil-input"
-                                                            id="seuil-<?= (int) $capteur['id'] ?>"
-                                                            data-capteur-id="<?= (int) $capteur['id'] ?>"
-                                                            placeholder="Non défini">
-                                                    </div>
-                                                </div>
-
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm table-bordered align-middle mb-0">
-                                                        <thead class="table-light">
-                                                            <tr>
-                                                                <th>Mesure</th>
-                                                                <th>Valeur</th>
-                                                                <th>Date</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            <?php
-                                                            $selectedMeasureType = $stats[0]['mesure_type'] ?? '';
-                                                            $typeIndexes = [];
-                                                            ?>
-                                                            <?php foreach ($mesures as $mesure): ?>
-                                                                <?php
-                                                                $mType = $mesure['mesure_type'];
-                                                                if (!isset($typeIndexes[$mType])) $typeIndexes[$mType] = 0;
-                                                                $typeIndex = $typeIndexes[$mType]++;
-                                                                $rowHidden = $mType !== $selectedMeasureType || $typeIndex >= 5;
-                                                                ?>
-                                                                <tr
-                                                                    class="sensor-measure-row <?= $rowHidden ? 'd-none' : '' ?>"
-                                                                    data-capteur-id="<?= (int) $capteur['id'] ?>"
-                                                                    data-mesure-type="<?= htmlspecialchars($mType) ?>"
-                                                                    data-type-index="<?= $typeIndex ?>">
-                                                                    <td><?= htmlspecialchars($mType) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $mesure['valeur']) ?></td>
-                                                                    <td><?= htmlspecialchars((string) $mesure['date_mesure']) ?></td>
-                                                                </tr>
-                                                            <?php endforeach; ?>
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-
-                                                <?php
-                                                $totalParType = [];
-                                                foreach ($mesures as $m) {
-                                                    $totalParType[$m['mesure_type']] = ($totalParType[$m['mesure_type']] ?? 0) + 1;
-                                                }
-                                                $totalDefaut = $totalParType[$selectedMeasureType] ?? 0;
-                                                $maxTotal    = !empty($totalParType) ? max($totalParType) : 0;
-                                                ?>
-                                                <div class="d-flex justify-content-between align-items-center mt-2">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <span class="text-secondary small voir-plus-compteur" data-capteur-id="<?= (int) $capteur['id'] ?>">
-                                                            <?= min(5, $totalDefaut) ?> / <?= $totalDefaut ?> mesures affichées
-                                                        </span>
-                                                        <?php if ($maxTotal > 5): ?>
-                                                            <button
-                                                                type="button"
-                                                                class="btn btn-outline-primary btn-sm voir-plus-btn <?= $totalDefaut <= 5 ? 'd-none' : '' ?>"
-                                                                data-capteur-id="<?= (int) $capteur['id'] ?>"
-                                                                data-visible="5">
-                                                                Voir plus
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                class="btn btn-outline-secondary btn-sm voir-moins-btn d-none"
-                                                                data-capteur-id="<?= (int) $capteur['id'] ?>">
-                                                                Voir moins
-                                                            </button>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </div>
-                                            <?php else: ?>
-                                                <div class="alert alert-info mb-0" role="alert">
-                                                    Aucune mesure n'est encore disponible pour ce capteur.
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php elseif (!empty($capteursInfo)): ?>
-                            <div class="alert alert-warning mb-0" role="alert">
-                                <?= htmlspecialchars($capteursInfo) ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="alert alert-info mb-0" role="alert">
-                                Aucun capteur n'est rattaché à cette salle.
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-body p-4">
-                        <h2 class="h5 fw-bold mb-3">Caméras installées</h2>
-
-                        <?php if (!empty($cameras)): ?>
-                            <div class="list-group">
-                                <?php foreach ($cameras as $camera): ?>
-                                    <?php
-                                    $cameraName = array_value($camera, 'nom', 'Caméra #' . array_value($camera, 'id', '?'));
-                                    $cameraUrl = array_value($camera, 'url_flux', array_value($camera, 'flux_url', array_value($camera, 'url')));
-                                    $cameraStatus = array_value($camera, 'camera_status', array_value($camera, 'is_connected'));
-                                    ?>
-                                    <div class="list-group-item">
-                                        <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <!-- En-tête du capteur -->
+                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                                             <div>
-                                                <h3 class="h6 fw-bold mb-1"><?= htmlspecialchars($cameraName) ?></h3>
-
-                                                <?php if (!empty($cameraUrl)): ?>
-                                                    <a href="<?= htmlspecialchars($cameraUrl) ?>" target="_blank" rel="noopener" class="link-primary">
-                                                        Ouvrir le flux
-                                                    </a>
-                                                <?php else: ?>
-                                                    <p class="text-secondary mb-0">Aucun flux renseigné.</p>
-                                                <?php endif; ?>
+                                                <h3 class="h6 fw-bold mb-1"><?= htmlspecialchars($capteur['type']) ?></h3>
+                                                <p class="text-secondary small mb-0">
+                                                    Unité : <?= htmlspecialchars($capteur['unite']) ?>
+                                                    &mdash; Arduino : <?= htmlspecialchars((string) $capteur['id_arduino']) ?>
+                                                </p>
                                             </div>
-
-                                            <?php if ($cameraStatus !== ''): ?>
-                                                <?php if ((int) $cameraStatus === 1): ?>
-                                                    <span class="badge text-bg-success">Active</span>
-                                                <?php else: ?>
-                                                    <span class="badge text-bg-danger">Inactive</span>
-                                                <?php endif; ?>
+                                            <?php if ((int) $capteur['is_connected'] === 1): ?>
+                                                <span class="badge text-bg-success">Connecté</span>
+                                            <?php else: ?>
+                                                <span class="badge text-bg-danger">Déconnecté</span>
                                             <?php endif; ?>
                                         </div>
+
+                                        <?php if (empty($mesures)): ?>
+                                            <div class="alert alert-info mb-0">Aucune mesure disponible pour ce capteur.</div>
+                                        <?php else: ?>
+
+                                            <!-- Tableau des statistiques (une ligne par type de mesure) -->
+                                            <h4 class="h6 text-secondary mb-2">Statistiques</h4>
+                                            <div class="table-responsive mb-3">
+                                                <table class="table table-sm table-bordered align-middle mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Type de mesure</th>
+                                                            <th>Total relevés</th>
+                                                            <th>Min</th>
+                                                            <th>Max</th>
+                                                            <th>Moyenne</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($stats as $s): ?>
+                                                            <tr>
+                                                                <td><?= htmlspecialchars($s['type_mesure']) ?></td>
+                                                                <td><?= (int) $s['total'] ?></td>
+                                                                <td><?= htmlspecialchars((string) $s['valeur_min']) ?> <?= htmlspecialchars($capteur['unite']) ?></td>
+                                                                <td><?= htmlspecialchars((string) $s['valeur_max']) ?> <?= htmlspecialchars($capteur['unite']) ?></td>
+                                                                <td><?= htmlspecialchars((string) $s['valeur_moyenne']) ?> <?= htmlspecialchars($capteur['unite']) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- Les 10 dernières mesures -->
+                                            <h4 class="h6 text-secondary mb-2">10 dernières mesures</h4>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered align-middle mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Type de mesure</th>
+                                                            <th>Valeur</th>
+                                                            <th>Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($mesures as $m): ?>
+                                                            <tr>
+                                                                <td><?= htmlspecialchars($m['type_mesure']) ?></td>
+                                                                <td><?= htmlspecialchars((string) $m['valeur']) ?> <?= htmlspecialchars($capteur['unite']) ?></td>
+                                                                <td><?= htmlspecialchars((string) $m['created_at']) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                        <?php endif; ?>
                                     </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php elseif (!empty($camerasInfo)): ?>
-                            <div class="alert alert-warning mb-0" role="alert">
-                                <?= htmlspecialchars($camerasInfo) ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="alert alert-info mb-0" role="alert">
-                                Aucune caméra n'est rattachée à cette salle.
-                            </div>
-                        <?php endif; ?>
-                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
                 </div>
             </div>
-        <?php endif; ?>
+        </div>
+
+        <!-- Section caméras -->
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-bold mb-3">Caméras installées</h2>
+
+                    <?php if (empty($cameras)): ?>
+                        <div class="alert alert-info mb-0">Aucune caméra rattachée à cette salle.</div>
+                    <?php else: ?>
+                        <div class="list-group">
+                            <?php foreach ($cameras as $camera): ?>
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <h3 class="h6 fw-bold mb-1"><?= htmlspecialchars($camera['nom']) ?></h3>
+                                            <?php if (!empty($camera['url_flux'])): ?>
+                                                <a href="<?= htmlspecialchars($camera['url_flux']) ?>" target="_blank" rel="noopener" class="link-primary">
+                                                    Ouvrir le flux
+                                                </a>
+                                            <?php else: ?>
+                                                <p class="text-secondary mb-0">Aucun flux renseigné.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if ((int) $camera['camera_status'] === 1): ?>
+                                            <span class="badge text-bg-success">Active</span>
+                                        <?php else: ?>
+                                            <span class="badge text-bg-danger">Inactive</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
+                </div>
+            </div>
+        </div>
+
     </div>
 </main>
 
+<!-- Actualisation automatique toutes les 30 secondes -->
 <script>
-    var gtbCapteurs = <?= json_encode($capteurDataJs, JSON_UNESCAPED_UNICODE) ?>;
-
-    function applyVisibility(capteurId, selectedType, visible) {
-        var rows = document.querySelectorAll('.sensor-measure-row[data-capteur-id="' + capteurId + '"]');
-        var shown = 0;
-
-        rows.forEach(function(row) {
-            if (row.dataset.mesureType !== selectedType) {
-                row.classList.add('d-none');
-                return;
-            }
-            var idx = parseInt(row.dataset.typeIndex, 10);
-            if (idx < visible) {
-                row.classList.remove('d-none');
-                shown++;
-            } else {
-                row.classList.add('d-none');
-            }
-        });
-
-        var total = Array.from(rows).filter(function(r) {
-            return r.dataset.mesureType === selectedType;
-        }).length;
-
-        var compteur = document.querySelector('.voir-plus-compteur[data-capteur-id="' + capteurId + '"]');
-        if (compteur) {
-            compteur.textContent = shown + ' / ' + total + ' mesures affichées';
-        }
-
-        var btnPlus = document.querySelector('.voir-plus-btn[data-capteur-id="' + capteurId + '"]');
-        if (btnPlus) {
-            btnPlus.dataset.visible = visible;
-            btnPlus.classList.toggle('d-none', shown >= total);
-        }
-
-        var btnMoins = document.querySelector('.voir-moins-btn[data-capteur-id="' + capteurId + '"]');
-        if (btnMoins) {
-            btnMoins.classList.toggle('d-none', visible <= 5);
-        }
-    }
-
-    document.querySelectorAll('.sensor-measure-select').forEach(function(select) {
-        select.addEventListener('change', function() {
-            var capteurId = select.dataset.capteurId;
-            var selectedType = select.value;
-            applyVisibility(capteurId, selectedType, 5);
-
-            var seuilInput = document.querySelector('.seuil-input[data-capteur-id="' + capteurId + '"]');
-            if (seuilInput) {
-                var stored = localStorage.getItem('gtb_seuil_' + capteurId + '_' + selectedType);
-                seuilInput.value = stored !== null ? stored : '';
-            }
-        });
-    });
-
-    document.querySelectorAll('.voir-plus-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var capteurId = btn.dataset.capteurId;
-            var visible = parseInt(btn.dataset.visible, 10) + 10;
-            var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
-            var selectedType = select ? select.value : '';
-            applyVisibility(capteurId, selectedType, visible);
-        });
-    });
-
-    document.querySelectorAll('.voir-moins-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var capteurId = btn.dataset.capteurId;
-            var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
-            var selectedType = select ? select.value : '';
-            applyVisibility(capteurId, selectedType, 5);
-        });
-    });
-
-    // Initialise les champs seuil depuis localStorage
-    document.querySelectorAll('.seuil-input').forEach(function(input) {
-        var capteurId = input.dataset.capteurId;
-        var select = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
-        if (select) {
-            var stored = localStorage.getItem('gtb_seuil_' + capteurId + '_' + select.value);
-            if (stored !== null) input.value = stored;
-        }
-
-        input.addEventListener('input', function() {
-            var sel = document.querySelector('.sensor-measure-select[data-capteur-id="' + capteurId + '"]');
-            if (!sel) return;
-            var key = 'gtb_seuil_' + capteurId + '_' + sel.value;
-            if (input.value !== '') {
-                localStorage.setItem(key, input.value);
-            } else {
-                localStorage.removeItem(key);
-            }
-        });
-    });
-
-    // Vérifie les seuils à chaque chargement et envoie une alerte si dépassé
-    if (typeof gtbCapteurs !== 'undefined') {
-        gtbCapteurs.forEach(function(sensor) {
-            var stored = localStorage.getItem('gtb_seuil_' + sensor.capteur_id + '_' + sensor.type_mesure);
-            if (stored === null || stored === '') return;
-            var seuil = parseFloat(stored);
-            if (isNaN(seuil) || sensor.derniere_valeur <= seuil) return;
-
-            fetch('api/create_alert.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id_capteur:  sensor.capteur_id,
-                    valeur:      sensor.derniere_valeur,
-                    seuil:       seuil,
-                    type_mesure: sensor.type_mesure
-                })
-            });
-        });
-    }
-
-    // Actualisation modérée pour remettre les statistiques à jour
-    setTimeout(function() {
+    setTimeout(function () {
         window.location.reload();
-    }, <?= (int) $refreshDelay ?> * 1000);
+    }, 30000);
 </script>
-
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
